@@ -1,11 +1,3 @@
 {
-  "clients": [
-    {
-      "key": "1",
-      "status": true,
-      "username": "dummyuser",
-      "password": "dummypw"
-    }
-  ],
-  "status": []
+  "users": []
 }
