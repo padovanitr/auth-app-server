@@ -4,6 +4,7 @@ import { LowSync } from "lowdb";
 import { JSONFileSync } from "lowdb/node";
 
 interface User {
+  id: string;
   name: string;
   email: string;
   password: string;
@@ -14,7 +15,7 @@ interface Database {
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const file = join(__dirname, "./db.json");
+const file = join(__dirname, "../db.json");
 
 const adapter = new JSONFileSync<Database>(file);
 const db = new LowSync(adapter, {
