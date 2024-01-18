@@ -1,7 +1,15 @@
 import express from "express";
-import db from "./dbConfig";
+import db, { User } from "./dbConfig";
 import bcrypt from "bcrypt";
 import { v4 as uuidv4 } from "uuid";
+import { JwtPayload, jwtDecode } from "jwt-decode";
+
+interface Auth0JwtPayload extends JwtPayload {
+  picture: string;
+  given_name: string;
+  family_name: string;
+  email: string;
+}
 
 const router = express.Router();
 
@@ -16,7 +24,7 @@ function findUser(email: string) {
 
 router.get("/users", (req, res) => {
   const data = db.data;
-  return res.json(data);
+  return res.json(data.users);
 });
 
 router.get("/user/:id", (req, res) => {
@@ -54,6 +62,37 @@ router.post("/auth/login", (req, res) => {
   }
 });
 
+router.post("/auth/login-google", (req, res) => {
+  const decoded = jwtDecode<Auth0JwtPayload>(req.body.credential);
+  console.log("decoded", decoded);
+  const user: Omit<User, "id" | "federated"> = {
+    name: `${decoded.given_name} ${decoded.family_name}`,
+    email: decoded.email,
+    password: "",
+  };
+
+  const userFound = findUser(user.email);
+
+  if (userFound) {
+    // User exists, we update it with the Google data
+    userFound.federated.google = decoded.aud;
+    db.write();
+    res.send({ ok: true, userId: userFound.id });
+  } else {
+    // User doesn't exist we create it
+    const newUser = {
+      ...user,
+      id: uuidv4(),
+      federated: {
+        google: decoded.aud,
+      },
+    };
+    db.data.users.push(newUser);
+    db.write();
+    res.send({ ok: true, userId: newUser.id });
+  }
+});
+
 router.post("/auth/register", (req, res) => {
   var salt = bcrypt.genSaltSync(10);
   var hash = bcrypt.hashSync(req.body.password, salt);
@@ -62,6 +101,7 @@ router.post("/auth/register", (req, res) => {
     name: req.body.name,
     email: req.body.email,
     password: hash,
+    federated: {},
   };
   const userFound = findUser(req.body.email);
 

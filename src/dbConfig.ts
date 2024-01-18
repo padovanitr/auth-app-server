@@ -3,11 +3,14 @@ import { fileURLToPath } from "url";
 import { LowSync } from "lowdb";
 import { JSONFileSync } from "lowdb/node";
 
-interface User {
+export interface User {
   id: string;
   name: string;
   email: string;
   password: string;
+  federated: {
+    google?: string | string[];
+  };
 }
 
 interface Database {
