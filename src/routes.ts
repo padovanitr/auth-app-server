@@ -32,7 +32,6 @@ router.get("/user/:id", (req, res) => {
   const users = db.data.users;
 
   const userFound = users.find((user) => user.id === userId);
-  console.log(userFound);
 
   if (userFound) {
     res.send({
@@ -64,7 +63,7 @@ router.post("/auth/login", (req, res) => {
 
 router.post("/auth/login-google", (req, res) => {
   const decoded = jwtDecode<Auth0JwtPayload>(req.body.credential);
-  console.log("decoded", decoded);
+
   const user: Omit<User, "id" | "federated"> = {
     name: `${decoded.given_name} ${decoded.family_name}`,
     email: decoded.email,
