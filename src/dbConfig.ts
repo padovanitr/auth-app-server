@@ -3,6 +3,11 @@ import { fileURLToPath } from "url";
 import { LowSync } from "lowdb";
 import { JSONFileSync } from "lowdb/node";
 
+type DeviceType = {
+  credentialID: unknown;
+  transports: string;
+};
+
 export interface User {
   id: string;
   name: string;
@@ -11,6 +16,9 @@ export interface User {
   federated: {
     google?: string | string[];
   };
+  webAuthn?: unknown;
+  devices?: DeviceType[];
+  currentChallenge?: string;
 }
 
 interface Database {
