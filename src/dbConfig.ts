@@ -6,6 +6,8 @@ import { JSONFileSync } from "lowdb/node";
 type DeviceType = {
   credentialID: unknown;
   transports: string;
+  credentialPublicKey: unknown;
+  counter: unknown;
 };
 
 export interface User {

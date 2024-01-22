@@ -8,9 +8,15 @@ import {
   VerifyRegistrationResponseOpts,
   generateRegistrationOptions,
   verifyRegistrationResponse,
+  generateAuthenticationOptions,
+  verifyAuthenticationResponse,
+  VerifyAuthenticationResponseOpts,
 } from "@simplewebauthn/server";
+import base64url from "base64url";
+import { AuthenticatorTransportFuture } from "@simplewebauthn/typescript-types";
 
 export const rpID = "localhost";
+export const expectedOriginUrl = "http://localhost:3001";
 
 interface Auth0JwtPayload extends JwtPayload {
   picture: string;
@@ -55,17 +61,14 @@ router.get("/user/:id", (req, res) => {
 });
 
 router.post("/auth/auth-options", (req, res) => {
-  console.log("req.body.email", req.body.email);
   const user = findUser(req.body.email);
-  console.log("user", user);
 
   if (user) {
     const userOptions = {
       password: !!user.password,
       google: user.federated && user.federated.google,
-      webauthn: user.webAuthn,
+      webAuthn: user.webAuthn,
     };
-    console.log("userOptions", userOptions);
 
     res.send(userOptions);
   } else {
@@ -194,7 +197,6 @@ router.post("/auth/webauth-registration-options", async (req, res) => {
     const regOptions = await generateRegistrationOptions(options);
 
     if (regOptions) {
-      console.log("entrou aqui no user");
       user.currentChallenge = regOptions.challenge;
       db.write();
       res.send(regOptions);
@@ -228,13 +230,12 @@ router.post("/auth/webauth-registration-verification", async (req, res) => {
     try {
       const options: VerifyRegistrationResponseOpts = {
         expectedChallenge: `${expectedChallenge}`,
-        expectedOrigin: "http://localhost:3001",
+        expectedOrigin: expectedOriginUrl,
         expectedRPID: rpID,
         requireUserVerification: true,
         response: response,
       };
       verification = await verifyRegistrationResponse(options);
-      console.log("verification", verification);
     } catch (error) {
       console.log(error);
       return res.status(400).send({ error });
@@ -271,6 +272,124 @@ router.post("/auth/webauth-registration-verification", async (req, res) => {
     res.send({ ok: true });
   } else {
     res.send({ ok: false, message: "Something went wrong, please try again" });
+  }
+});
+
+router.post("/auth/webauth-login-options", async (req, res) => {
+  const user = findUser(req.body.email);
+
+  if (user == null) {
+    res.sendStatus(404);
+    return;
+  }
+
+  const options = {
+    timeout: 60000,
+    allowCredentials: [],
+    devices:
+      user && user.devices
+        ? user.devices.map((dev) => ({
+            id: dev.credentialID,
+            type: "public-key",
+            transports: dev.transports,
+          }))
+        : [],
+    userVerification: "required" as UserVerificationRequirement,
+    rpID,
+  };
+
+  const loginOpts = await generateAuthenticationOptions(options);
+  if (user) user.currentChallenge = loginOpts.challenge;
+  res.send(loginOpts);
+});
+
+router.post("/auth/webauth-login-verification", async (req, res) => {
+  const data = req.body.data;
+  const user = findUser(req.body.email);
+
+  const response = {
+    id: data.id,
+    rawId: data.rawId,
+    response: data.response,
+    clientExtensionResults: data.clientExtensionResults,
+    type: data.type,
+  };
+
+  if (user) {
+    const expectedChallenge = user.currentChallenge;
+
+    let dbAuthenticator;
+    const bodyCredIDBuffer = base64url.toBuffer(data.rawId);
+    console.log("user.devices", user.devices);
+
+    if (!user.devices) {
+      return;
+    }
+
+    // "Query the DB" here for an authenticator matching `credentialID`
+    for (const dev of user.devices) {
+      const currentCredential = Buffer.from(
+        Object.values(dev.credentialID as Record<string, number>)
+      );
+      if (bodyCredIDBuffer.equals(currentCredential)) {
+        dbAuthenticator = dev;
+        break;
+      }
+    }
+
+    if (!dbAuthenticator) {
+      return res.status(400).send({
+        ok: false,
+        message: "Authenticator is not registered with this site",
+      });
+    }
+
+    let verification;
+    try {
+      const options: VerifyAuthenticationResponseOpts = {
+        expectedChallenge: `${expectedChallenge}`,
+        expectedOrigin: expectedOriginUrl,
+        expectedRPID: rpID,
+        authenticator: {
+          ...dbAuthenticator,
+          credentialID: Buffer.from(
+            Object.values(
+              dbAuthenticator.credentialID as Record<string, number>
+            )
+          ),
+          credentialPublicKey: Buffer.from(
+            Object.values(
+              dbAuthenticator.credentialPublicKey as Record<string, number>
+            )
+          ), // Re-convert to Buffer from JSON
+          counter: dbAuthenticator.counter as number,
+          transports: dbAuthenticator.transports as unknown as
+            | AuthenticatorTransportFuture[]
+            | undefined,
+        },
+        requireUserVerification: false,
+        response: response,
+      };
+      verification = await verifyAuthenticationResponse(options);
+    } catch (error) {
+      return res.status(400).send({ ok: false, message: error });
+    }
+
+    const { verified, authenticationInfo } = verification;
+
+    if (verified) {
+      dbAuthenticator.counter = authenticationInfo.newCounter;
+    }
+
+    res.send({
+      ok: true,
+      user: {
+        name: user.name,
+        email: user.email,
+      },
+    });
+  } else {
+    res.sendStatus(400).send({ ok: false });
   }
 });
 
