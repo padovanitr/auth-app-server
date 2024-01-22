@@ -248,7 +248,9 @@ router.post("/auth/webauth-registration-verification", async (req, res) => {
 
       const existingDevice = user.devices
         ? user.devices.find((device) =>
-            Buffer.from(device.credentialID as Buffer).equals(credentialID)
+            Buffer.from(
+              Object.values(device.credentialID as Uint8Array)
+            ).equals(credentialID)
           )
         : false;
 
@@ -320,7 +322,6 @@ router.post("/auth/webauth-login-verification", async (req, res) => {
 
     let dbAuthenticator;
     const bodyCredIDBuffer = base64url.toBuffer(data.rawId);
-    console.log("user.devices", user.devices);
 
     if (!user.devices) {
       return;
@@ -383,13 +384,12 @@ router.post("/auth/webauth-login-verification", async (req, res) => {
 
     res.send({
       ok: true,
-      user: {
-        name: user.name,
-        email: user.email,
-      },
+      userId: user.id,
     });
   } else {
-    res.sendStatus(400).send({ ok: false });
+    res
+      .sendStatus(400)
+      .send({ ok: false, message: "Something went wrong, please try again" });
   }
 });
 
