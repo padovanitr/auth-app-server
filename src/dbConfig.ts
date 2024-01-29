@@ -39,15 +39,6 @@ db.read();
 
 db.data ||= { users: [] };
 
-/* if (db.data.clients.length === 0) {
-  db.data.clients.push({
-    key: "1",
-    status: true,
-    username: "dummyuser",
-    password: "dummypw",
-  });
-} */
-
 db.write();
 
 export default db;
